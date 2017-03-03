@@ -44,52 +44,52 @@
 #define UNICODE 1
 
 
-#include    <mdl.h>
-#include    <MicroStationAPI.h>
+#include <mdl.h>
+#include <MicroStationAPI.h>
 #include "SheetAutomation.h"
 #include "MyElementGraphicsProcessor.h"
 
-#include    <stdio.h>
-#include    <string.h>
-#include    <malloc.h>
-#include    <mselemen.fdf>
-#include    <mselmdsc.fdf>
-#include    <mslinkge.fdf>
-#include    <msscancrit.fdf>
-#include    <mstagdat.fdf>
-#include    <mselems.h>
-#include    <mscell.fdf>
-#include    <leveltable.fdf>
-#include    <mslstyle.fdf>
-#include    <msstrlst.h>
-#include    <mscnv.fdf>
-#include    <msdgnobj.fdf>
-#include    <msmodel.fdf>
-#include    <msview.fdf>
-#include    <msviewinfo.fdf>
-#include    <msvar.fdf>
-#include    <dlmsys.fdf>
-#include    <msdialog.fdf>
-#include    <mswrkdgn.fdf>
-#include    <msrmgr.h>
-#include    <mssystem.fdf>
-#include    <msparse.fdf>
-#include    <msfile.fdf>
-#include	<toolsubs.h>
-#include    <mssheetdef.h>
-#include    <msreffil.fdf>
+#include <stdio.h>
+#include <string.h>
+#include <malloc.h>
+#include <mselemen.fdf>
+#include <mselmdsc.fdf>
+#include <mslinkge.fdf>
+#include <msscancrit.fdf>
+#include <mstagdat.fdf>
+#include <mselems.h>
+#include <mscell.fdf>
+#include <leveltable.fdf>
+#include <mslstyle.fdf>
+#include <msstrlst.h>
+#include <mscnv.fdf>
+#include <msdgnobj.fdf>
+#include <msmodel.fdf>
+#include <msview.fdf>
+#include <msviewinfo.fdf>
+#include <msvar.fdf>
+#include <dlmsys.fdf>
+#include <msdialog.fdf>
+#include <mswrkdgn.fdf>
+#include <msrmgr.h>
+#include <mssystem.fdf>
+#include <msparse.fdf>
+#include <msfile.fdf>
+#include <toolsubs.h>
+#include <mssheetdef.h>
+#include <msreffil.fdf>
 //scan code
-#include	<elementref.h>
+#include <elementref.h>
 //locate code
-#include	<msdependency.fdf>
-#include	<msassoc.fdf>
-#include	<msmisc.fdf>
-#include	<mslocate.fdf>
-#include	<msstate.fdf>
-#include	<msoutput.fdf>
+#include <msdependency.fdf>
+#include <msassoc.fdf>
+#include <msmisc.fdf>
+#include <mslocate.fdf>
+#include <msstate.fdf>
+#include <msoutput.fdf>
 #define EXTRA_TESTING
 //place command
-#include	<mstmatrx.fdf>
+#include <mstmatrx.fdf>
 #undef CF_MAX
 
 #include <aawindms.h>
@@ -102,8 +102,8 @@
 #include <fstream>
 #include "SheetAutomationCmd.h"
 
-#include    <interface/element/Handler.h>
-#include    <interface/element/DisplayHandler.h>
+#include <interface/element/Handler.h>
+#include <interface/element/DisplayHandler.h>
 
 USING_NAMESPACE_BENTLEY
 USING_NAMESPACE_BENTLEY_USTN
@@ -179,20 +179,27 @@ extern "C"  void     log_printf(long  level,char  *szFormat,...)
     dumpString (szBuf);
     }
 
-
+/* -----------------------------------------------------------------------------+
+|  Gets the cached datasource name.                                             |
+|                                                                               |
++------------------------------------------------------------------------------*/
 void GetDataSourceName (WStringR dsName)
 {
     dsName = gDataSource;
     return;
 }
-
+/*------------------------------------------------------------------------------+
+|  Sets the cached datasource name                                              |
+|                                                                               |
++------------------------------------------------------------------------------*/
 void SetDataSourceName(WStringR dsName)
 {
     gDataSource = dsName;
 }
 #if defined (GRAPHICS_TEST)
 /*--------------------------------------------------------------------------**//**
-* @description This function processes all the elements as solids or GPA.  WIP to handle Building elements?  
+* @description This function processes all the elements as solids or GPA.  
+*              WIP to handle Building elements?  
 * @param  eh the element handle to process.
 * @param  reporter the reporting object.
 * @bsimethod                       @author BSI
@@ -203,9 +210,14 @@ Private void ProcessSpecial (ElemHandle eh, Reporter reporter)
     KIENTITY_LIST *listP= NULL;
     int count;
     int solidstatus;
-    mdlKISolid_listCreate (&listP);    
-    solidstatus = mdlKISolid_elementToBodyList(&listP,NULL,NULL,NULL,const_cast <MSElementDescr*>(eh.GetElemDescrCP()),eh.GetModelRef(),0,TRUE,TRUE,TRUE);
-    if (SUCCESS == solidstatus){
+    solidstatus = mdlKISolid_listCreate (&listP);    
+    
+    solidstatus = mdlKISolid_elementToBodyList(&listP,NULL,NULL,NULL,
+                               const_cast <MSElementDescr*>(eh.GetElemDescrCP()),
+                               eh.GetModelRef(),0,TRUE,TRUE,TRUE);
+
+    if (SUCCESS == solidstatus)
+    {
         solidstatus = mdlKISolid_listCount (&count,listP);   
         if (SUCCESS == solidstatus){
             for (int i =0;SUCCESS== mdlKISolid_listNthEl (&bodyP,listP,i);++i)
@@ -214,8 +226,10 @@ Private void ProcessSpecial (ElemHandle eh, Reporter reporter)
                 mdlKISolid_freeBody(bodyP);
                 }
         }
-        mdlKISolid_listDelete (&listP);
     }
+
+    mdlKISolid_listDelete (&listP);
+//done with trying it as a solid now trying it as a handler interface.
     Bentley::WString nameInfo1;
     Handler& tempHandle = eh.GetHandler(MISSING_HANDLER_PERMISSION_All_);
    // tempHandle.GetDescription(eh,nameInfo1,512);
@@ -240,7 +254,7 @@ Private void ProcessSpecial (ElemHandle eh, Reporter reporter)
     }
 
 
-                    //playing around with the iterators.
+    //playing around with the iterators.
     for (ChildElemIter child(eh,EXPOSECHILDREN_Count );child.IsValid();child= child.ToNext())
         {
         Bentley::WString nameInfo;
@@ -258,6 +272,12 @@ Private void ProcessSpecial (ElemHandle eh, Reporter reporter)
     //double volume = SolidsFunctions::MeasureSupport::GetVolume (eh.GetElemDescrCP());
     return;
     }
+
+/*------------------------------------------------------------------------------+
+|   imodelVisitor_processModel this is a way of processing a model by iterating |
+|   over the elements.  It will get only the top level elements.                |
+|                                                                               |
++------------------------------------------------------------------------------*/
 int imodelVisitor_processModel (DgnModelRefP pModel)
      {
      MSDgnFileP pFile;
@@ -313,6 +333,16 @@ int imodelVisitor_processModel (DgnModelRefP pModel)
     return elCounter;
     }
 #endif
+/*------------------------------------------------------------------------------+
+|  SheetAutomation_ModelTest - this is for testing the special element          |
+|  processing.                                                                  |
+|                                                                               |
++------------------------------------------------------------------------------*/
+extern "C" DLLEXPORT void SheetAutomation_ModelTest(char* unparsed)
+{
+    imodelVisitor_processModel(ACTIVEMODEL);
+}
+
 
 //-----------------------------------------------------------------------------
 // check the file into the ProjectWise repository if the file already exists
@@ -341,7 +371,12 @@ long SheetAutomation_getCurrentProjectID(DgnModelRefP pModel)
         projID = giProjectID;
     return projID;
 }
-long SheetAutomation_getCurrentDocumentID(DgnModelRefP pModel)
+/*------------------------------------------------------------------------------+
+|  SheetAutomation_getCurrentDocumentID - this will get the current doc id      |
+|  based on the mcm API - not the best but it works some times.                 |
+|                                                                               |
++------------------------------------------------------------------------------*/
+long SheetAutomation_getCurrentDocumentID(DgnModelRefP pModel)               
 {
     long projID;
     long docID;
@@ -445,6 +480,11 @@ long SheetAutomation_getSheetPath(long startProjID)
 
     return rtnID;
 }
+/*------------------------------------------------------------------------------+
+| SheetAutomation_commitToPW - this will take the new model ref and the old     |
+| document and project ids.  it will call the function to walk back up the tree |
+| and over to the new location.                                                 |
++------------------------------------------------------------------------------*/
 int SheetAutomation_commitToPW(DgnModelRefP pModel,long projID,long parentID)
 {
     long iFileType = AADMS_FTYPE_DWG;
@@ -488,8 +528,9 @@ int SheetAutomation_commitToPW(DgnModelRefP pModel,long projID,long parentID)
                                     iWorkspace,fileName,baseFileName,fName,
                                     description.GetMSWCharCP(),
                                     NULL,bLeaveOut,ulFlags,workingFileName,
-                                    bufferSize,&attrId);     
-        
+                                    bufferSize,&attrId);  
+
+    //if the file is checked in then make a set of things.    
     if(bStatus)
     {
         long  setId;
@@ -519,7 +560,11 @@ int SheetAutomation_commitToPW(DgnModelRefP pModel,long projID,long parentID)
     log_printf(0," File CREATED, SET CREATED, and APPTYPE applied ");
     return SUCCESS;
 }
-
+/*------------------------------------------------------------------------------+
+| SheetAutomation_attachReference this will attach the reference file.          |
+| if the bFlag is true then it will do a rotation adjustment.  I don't think    |
+| this is being used..                                                          |
++------------------------------------------------------------------------------*/
 void SheetAutomation_attachReference(DgnModelRefP pModel, DgnModelRefP attachModel, int nestFlag, bool bFlag)
 {
     DgnModelRefP refAttachment;
@@ -567,7 +612,10 @@ void SheetAutomation_attachReference(DgnModelRefP pModel, DgnModelRefP attachMod
     if (SUCCESS == status)
         log_printf(0, "Reference File Attachment completed ");
 }
-
+/*------------------------------------------------------------------------------+
+| SheetAutomation_createSheet - this creates the sheet model.                   |
+|                                                                               |
++------------------------------------------------------------------------------*/
 void SheetAutomation_createSheet(void)
 {
     int          status;
@@ -583,9 +631,8 @@ void SheetAutomation_createSheet(void)
     DgnModelRefP origSheetModelP=NULL;
     DgnFileObjP  currentFileP = ISessionMgr::GetActiveDgnFile();
     DgnFileObjP  destFileP;
-    //DgnModelRefP testingP;
     MSWChar wrkFile[MAXFILELENGTH];
-
+    //copy out the file to make sure we have it for reference.
     aaApi_CopyOutDocument(giProjectID,giDocID,NULL,wrkFile,MAXFILELENGTH);
     
     //break down the location.
@@ -608,29 +655,27 @@ void SheetAutomation_createSheet(void)
     {
     SheetDef* sdP=NULL;
     status = mdlModelRef_getSheetDef(origSheetModelP,sdP);
-   // if(SUCCESS == status)
-        {
-        destFileP = mdlModelRef_getDgnFile(outModel);
-        //copy the  sheet model from the source to the new file.
-        status = mdlModelRef_copyModel (&sheetModelP,origSheetModelP,destFileP,L"SheetView",L"Sheet View");
-        mdlWorkDgn_saveChanges(outModel); 
         
-        log_printf(0,"the sheet model is copied ");
+    destFileP = mdlModelRef_getDgnFile(outModel);
+    //copy the  sheet model from the source to the new file.
+    status = mdlModelRef_copyModel (&sheetModelP,origSheetModelP,destFileP,L"SheetView",L"Sheet View");
+    mdlWorkDgn_saveChanges(outModel); 
+        
+    log_printf(0,"the sheet model is copied ");
 
-        if (SUCCESS == status)
-            {
-                //attach the design model in the SHT file to the sheet model in the SHT file.
-                SheetAutomation_attachReference(sheetModelP,origSheetModelP,REFATTACH_NEST_DISPLAY, false);
-                mdlModelRef_setModelType(sheetModelP,MODEL_TYPE_Sheet);
-                mdlModelRef_freeWorking(sheetModelP);
+    if (SUCCESS == status)
+        {
+            //attach the design model in the SHT file to the sheet model in the SHT file.
+            SheetAutomation_attachReference(sheetModelP,origSheetModelP,REFATTACH_NEST_DISPLAY, false);
+            mdlModelRef_setModelType(sheetModelP,MODEL_TYPE_Sheet);
+            mdlModelRef_freeWorking(sheetModelP);
                 
-                if(sdP!=NULL)
-                    mdlSheetDef_free(&sdP);
+            if(sdP!=NULL)
+                mdlSheetDef_free(&sdP);
                 
-                mdlWorkDgn_saveChanges(outModel);
-            }
-        
+            mdlWorkDgn_saveChanges(outModel);
         }
+                
     mdlModelRef_freeWorking(origSheetModelP);
     }
     long projID = SheetAutomation_getCurrentProjectID(ACTIVEMODEL);
@@ -643,7 +688,6 @@ void SheetAutomation_createSheet(void)
         log_printf(0,"error commiting to PW store");
     else
         log_printf(0,"Commited Project ID %ld ",status);
-
 
     mdlWorkDgn_closeFile(outModel);
 
@@ -681,16 +725,9 @@ char * unparsed
             giDocID = iDocumentID;
         }
         }
-    printf ("SheetAutomation_mdlCommand\n");
+
     SheetAutomation_createSheet();
-    mdlDialog_dmsgsPrint("SheetAutomation_mdlCommand\n");  
-
     }
-
-extern "C" DLLEXPORT void SheetAutomation_ModelTest(char* unparsed)
-{
-    imodelVisitor_processModel(ACTIVEMODEL);
-}
 /*-----------------------------------------------------------------------------+
 | SheetAutomation_PwLogin - does the login to the datasource.                  |
 |                                                                              |
@@ -806,8 +843,6 @@ char        *argv[]
     mdlSystem_registerCommandNumbers (cmdNumbers);
 
     mdlParse_loadCommandTable (NULL);
-
-    //SheetAutomation_loginCMD("MarksPWDatasource dwgExp password");
 
     return SUCCESS;
     }
