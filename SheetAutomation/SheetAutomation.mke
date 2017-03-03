@@ -1,0 +1,157 @@
+#--------------------------------------------------------------------------------------
+#
+#     $Source: /miscdev-root/miscdev/vault/VisualStudioWizards/MDLProjectWizard/Templates/1033/root.mke,v $
+#
+#  $Copyright: (c) 2013 Bentley Systems, Incorporated. All rights reserved. $
+#
+#--------------------------------------------------------------------------------------
+appName		= SheetAutomation
+sAppName	= SheetAutomation
+
+baseDir         = $(_MakeFilePath)
+langSpec	= $(baseDir)english/
+
+winSDKFolder="C:/Program Files (x86)/Microsoft SDKs/Windows/v7.0a"
+
+
+%include mdl.mki
+
+dirToSearch = $(MSMDE)mdl/MicroStationAPI/
+%include cincapnd.mki
+
+%if ! defined (BSI)
+    transkitReqObj = $(o)
+    transkitGenSrc = $(genSrc)
+%endif
+
+#-----------------------------------------------------------
+# add the projectwise SDK to the search path in the  dev shell
+# typically set PWSDK=C:\PROGRA~2\Bentley\ProjectWise\SDK\
+#-----------------------------------------------------------
+
+dirToSearch = $(PWSDK)INCLUDE/
+%include cincapnd.mki
+
+dirToSearch = $(PWSDK)INCLUDE/mcmapi/
+%include cincapnd.mki
+
+PWSDKLIBS=$(PWSDK)/libwin32/
+
+#----------------------------------------------------------------------
+# Define macros for files included in our link and resource merge
+#----------------------------------------------------------------------
+appRscs         = $(o)$(appName).rsc \
+                  $(o)$(appName)msg.rsc \
+                  $(o)$(sAppName)cmd.rsc
+
+#----------------------------------------------------------------------
+# Create needed output directories if they don't exist
+#----------------------------------------------------------------------
+$(o)$(tstdir)			: $(o)$(tstdir)
+
+#-----------------------------------------------------------------------
+#	Define constants specific to this example
+#-----------------------------------------------------------------------
+#-----------------------------------------------------------------------
+#	Generate non-language resource files
+#-----------------------------------------------------------------------
+$(baseDir)$(appName)cmd.h       : $(baseDir)$(appName)cmd.r
+
+$(o)$(appName)cmd.rsc		: $(baseDir)$(appName)cmd.r
+
+$(o)$(appName).rsc              :$(baseDir)$(appName).r
+
+
+#-----------------------------------------------------------------------
+#	Generate language resource files
+#-----------------------------------------------------------------------
+$(o)$(appName)msg.rsc              :$(langSpec)$(appName)msg.r
+
+#-----------------------------------------------------------------------
+#  Build Native Code 
+#-----------------------------------------------------------------------
+dlmObjs = \
+$(o)$(appName)$(oext) \
+$(o)Reporter$(oext)   \
+$(o)MyElementGraphicsProcessor$(oext)
+
+
+DLM_NO_DLS              = 1             # USE DLLEXPORT IN .CPP
+DLM_NO_DEF              = 1
+DLM_NOENTRY             = 1
+DLM_NO_NTBSADDR         = 1
+DLM_NO_SIGN             = 1
+DLM_NO_MANIFEST         = 1
+DLM_OBJECT_DEST         = $(o)
+DLM_LIBDEF_SRC          = $(baseDir)
+DLM_DEST                = $(mdlapps)
+DLM_NAME                = $(appName)
+DLM_ENTRY_NAME          = dllentry
+DLM_RESL_NAME           = $(appName)
+DLM_OBJECT_FILES        = $(dlmObjs)
+DLM_SYM_NAME            = $(dllName)
+DLM_SPECIAL_LINKOPT     = -fixed:no
+DLM_LIBRARY_FILES 	= $(mdlLibs)bentleydgn.lib \
+                      $(mdlLibs)dgnfileio.lib \
+                      $(mdlLibs)toolsubs.lib \
+                      $(mdlLibs)ditemlib.lib \
+                      $(mdlLibs)mdllib.lib \
+                      $(mdlLibs)kisolid.lib \
+                      $(mdlLibs)mspsolid.lib \
+                      $(mdlLibs)msbspline.lib \
+                      $(mdlLibs)mdlxmltools.lib \
+                      $(mdlLibs)mdlxml.lib \
+                      $(mdlLibs)mtg.lib  \
+                      $(PWSDKLIBS)dmactrl.lib \
+                      $(PWSDKLIBS)dmscli.lib  \
+                      $(PWSDKLIBS)dmawin.lib \
+                      $(PWSDKLIBS)dmsgen.lib \
+                      $(PWSDKLIBS)mcmapi.lib \
+                      $(mdlLibs)bentley.publish.lib \
+                      $(mdlLibs)bentley.xmlinstancenative.lib \
+                      $(mdlLibs)bentley.provenancenative.lib \
+                      $(mdlLibs)bentley.imodelconnection.lib  
+
+#------------------------------------------------
+#	Compile the source files for the DLM
+#------------------------------------------------
+
+$(o)Reporter$(oext)              : $(baseDir)Reporter.cpp $(baseDir)Reporter.h
+
+$(o)MyElementGraphicsProcessor$(oext) : $(baseDir)MyElementGraphicsProcessor.cpp $(baseDir)MyElementGraphicsProcessor.h
+
+$(o)$(appName)$(oext)   : $(baseDir)$(appName).cpp
+
+%include dlmlink.mki
+
+#-----------------------------------------------------------------------
+#	Merge Objects into one file
+#-----------------------------------------------------------------------
+$(o)$(sAppName).mi        : $(appRscs)
+    $(msg)	
+    >$(o)make.opt
+    -o$@
+    $(appRscs)
+    <
+    $(RLibCmd) @$(o)make.opt
+    ~time
+
+#----------------------------------------------------------------------
+# complete construction of the .ma
+#----------------------------------------------------------------------
+# %include $(sAppName)rsc.mki
+#
+
+appRscs =   \
+         $(o)$(sAppName).mi
+
+$(mdlapps)$(appName).ma		: $(appRscs)
+    $(msg)
+    > $(o)make.opt
+    -o$@
+    $(appRscs)
+    <
+    $(RLibCmd) @$(o)make.opt
+    ~time
+
+
