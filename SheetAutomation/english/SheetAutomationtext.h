@@ -29,10 +29,15 @@
 // ---------------------------------------------------------------------------
 /*
 /* CHANGE LOG
- * $Archive:  $
- * $Revision: $
- * $Modtime:  $
- * $History:  $
+ * $Archive: /MDL/ISOSheetAutomation/SheetAutomation/SheetAutomation/english/SheetAutomationtext.h $
+ * $Revision: 1 $
+ * $Modtime: 3/03/17 12:38p $
+ * $History: SheetAutomationtext.h $
+ * 
+ * *****************  Version 1  *****************
+ * User: Mark.anderson Date: 3/06/17    Time: 11:58a
+ * Created in $/MDL/ISOSheetAutomation/SheetAutomation/SheetAutomation/english
+ * Initial checkin
  * 
  +--------------------------------------------------------------------------------------*/
 

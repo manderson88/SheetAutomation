@@ -29,10 +29,15 @@
 // ---------------------------------------------------------------------------
 /*
 /* CHANGE LOG
- * $Archive:  $
- * $Revision: $
- * $Modtime:  $
- * $History:  $
+ * $Archive: /MDL/ISOSheetAutomation/SheetAutomation/SheetAutomation/SheetAutomation.cpp $
+ * $Revision: 1 $
+ * $Modtime: 3/06/17 9:19a $
+ * $History: SheetAutomation.cpp $
+ * 
+ * *****************  Version 1  *****************
+ * User: Mark.anderson Date: 3/06/17    Time: 12:00p
+ * Created in $/MDL/ISOSheetAutomation/SheetAutomation/SheetAutomation
+ * Initial checkin
  * 
  +--------------------------------------------------------------------------------------*/
 
@@ -112,9 +117,9 @@ USING_NAMESPACE_BENTLEY_USTN_ELEMENT
 #define DIM(a)      (  (sizeof a) / sizeof *(a)  )
 //#include "Reporter.h"
 static WString gDataSource;
-static BOOL gisLoggedIn = FALSE;
-static long giProjectID;
-static long giDocID;
+static BOOL g_isLoggedIn = FALSE;
+static long g_iProjectID;
+static long g_iDocID;
 //-----------------------------------------------------------------------------
 //a method to write to a file for process logging
 //-----------------------------------------------------------------------------
@@ -368,7 +373,7 @@ long SheetAutomation_getCurrentProjectID(DgnModelRefP pModel)
     }
 
     if(projID == 0)
-        projID = giProjectID;
+        projID = g_iProjectID;
     return projID;
 }
 /*------------------------------------------------------------------------------+
@@ -391,7 +396,7 @@ long SheetAutomation_getCurrentDocumentID(DgnModelRefP pModel)
          log_printf(1, "PWERROR getting  project store %S - %S",lastMessage,lastDetail);
     }
     if(docID == 0)
-        docID = giDocID;
+        docID = g_iDocID;
 
     return docID;
 }
@@ -423,7 +428,7 @@ long SheetAutomation_getSheetPath(long startProjID)
     status = aaApi_SelectParentProject(parentID);
     parentID = aaApi_GetProjectNumericProperty(PROJ_PROP_ID,0);
 
-    //back up three...
+    //back up three...this should be the Mechanical folder
     status = aaApi_SelectParentProject(parentID);
     parentID = aaApi_GetProjectNumericProperty(PROJ_PROP_ID,0);
 
@@ -585,8 +590,8 @@ void SheetAutomation_attachReference(DgnModelRefP pModel, DgnModelRefP attachMod
     char attName[MAXFILELENGTH];
     char ext[MAXEXTENSIONLENGTH];
     mdlFile_parseName(fileName,dev,dir,attName,ext);
-    if(giProjectID>0)
-        sprintf(attachmentFileName,"PW_WORKDIR:dms%05d\\%s.%s",giProjectID,attName,ext);
+    if(g_iProjectID>0)
+        sprintf(attachmentFileName,"PW_WORKDIR:dms%05d\\%s.%s",g_iProjectID,attName,ext);
     else
         strcpy(attachmentFileName,fileName);
     log_printf(0,"creating attachment ");
@@ -598,7 +603,10 @@ void SheetAutomation_attachReference(DgnModelRefP pModel, DgnModelRefP attachMod
     {
         RotMatrix rMatrix;
         int       attachMethod = ATTACHMETHOD_Isometric;
-
+        //at one time I thought I had to rotate the reference file.
+        //turns out I did not just attach to the correct model.
+        //left this in for reference on how to work with the reference during
+        //attach process.
         mdlView_getStandard(&rMatrix,STDVIEW_ISO);
         mdlRefFile_setParameters (&rMatrix,REFERENCE_ROTATION,refAttachment);
         mdlRefFile_setParameters(&attachMethod,REFERENCE_ATTACHMETHOD, refAttachment);
@@ -633,7 +641,7 @@ void SheetAutomation_createSheet(void)
     DgnFileObjP  destFileP;
     MSWChar wrkFile[MAXFILELENGTH];
     //copy out the file to make sure we have it for reference.
-    aaApi_CopyOutDocument(giProjectID,giDocID,NULL,wrkFile,MAXFILELENGTH);
+    aaApi_CopyOutDocument(g_iProjectID,g_iDocID,NULL,wrkFile,MAXFILELENGTH);
     
     //break down the location.
     mdlModelRef_getFileName(ACTIVEMODEL,baseFullFileName,MAXFILELENGTH);
@@ -705,25 +713,25 @@ char * unparsed
     {
         if((unparsed) && (strlen(unparsed)>0))
         {
-        int   status = 0;
-        int     argc, numchars;
-        char  **argv, *argStrings;
+            int   status = 0;
+            int     argc, numchars;
+            char  **argv, *argStrings;
 
-            // Determine the space needed for argc/argv
-        mdlString_parseIntoArgcArgv (unparsed, NULL, NULL, &argc, &numchars);
-        argv       = (char**)_alloca ((argc+1) * sizeof(char *) );
-        argStrings = (char*)_alloca ((numchars+1) * sizeof(char) );
+                // Determine the space needed for argc/argv
+            mdlString_parseIntoArgcArgv (unparsed, NULL, NULL, &argc, &numchars);
+            argv       = (char**)_alloca ((argc+1) * sizeof(char *) );
+            argStrings = (char*)_alloca ((numchars+1) * sizeof(char) );
 
-        // Actually split up the arguments
-        mdlString_parseIntoArgcArgv (unparsed, argv, argStrings, &argc, &numchars);
+            // Actually split up the arguments
+            mdlString_parseIntoArgcArgv (unparsed, argv, argStrings, &argc, &numchars);
     
-        if (argc >= 2)
-        {
-            long iProjectID = atoi(argv[0]);
-            long iDocumentID = atoi(argv[1]);
-            giProjectID = iProjectID;
-            giDocID = iDocumentID;
-        }
+            if (argc >= 2)
+            {
+                long iProjectID = atoi(argv[0]);
+                long iDocumentID = atoi(argv[1]);
+                g_iProjectID = iProjectID;
+                g_iDocID = iDocumentID;
+            }
         }
 
     SheetAutomation_createSheet();
@@ -759,10 +767,10 @@ char * unparsed
     
     log_printf(0,"logging into PW returned %ld status ",loginState);
 
-    gisLoggedIn = loginState;
+    g_isLoggedIn = loginState;
     SetDataSourceName(WString (wdsName));
     
-    return gisLoggedIn?SUCCESS:!SUCCESS;
+    return g_isLoggedIn?SUCCESS:!SUCCESS;
 
 }
 /*-----------------------------------------------------------------------------+
@@ -801,8 +809,8 @@ extern "C" DLLEXPORT void SheetAutomation_loginCMD(char* unparsed)
     }
     if(argc > 3)
     {
-    giDocID = atoi(argv[4]);
-    giProjectID = atoi(argv[3]);
+    g_iDocID = atoi(argv[4]);
+    g_iProjectID = atoi(argv[3]);
     }
     return;
 }
