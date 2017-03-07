@@ -401,6 +401,69 @@ long SheetAutomation_getCurrentDocumentID(DgnModelRefP pModel)
     return docID;
 }
 /*------------------------------------------------------------------------------+
+|  SheetAutomation_findFolderID - finds a node that is a child folder           |
+|                                                                               |
+|  Input: startingFolder the parent folder to start from.                       |
+|         targetName - the name of the leaf to search for.                      |
+|  Return: the id of the folder                                                 |
++------------------------------------------------------------------------------*/
+long SheetAutomation_findFolderID (long startingFolder,LPCWSTR targetName)
+{
+    long folderID = 0;
+    HAADMSBUFFER buffer;
+    buffer = aaApi_SelectProjectDataBufferChilds2(startingFolder,false);
+    int childCount = aaApi_DmsDataBufferGetCount(buffer);
+    for (int i = 0;i<childCount; i++)
+    {
+        LPCWSTR childName = aaApi_DmsDataBufferGetStringProperty(buffer,PROJ_PROP_NAME,i);
+        if (wcscmp(childName,targetName) == 0)
+        {
+            folderID = aaApi_DmsDataBufferGetNumericProperty(buffer,PROJ_PROP_ID,i);
+        }
+    }
+
+    return folderID;
+}
+/*------------------------------------------------------------------------------+
+| SheetAutomation_findLeafCreateIfMissing - this function will find the node    |
+| that matches the name passed in.  If the node does not exist then it is       |
+| created.                                                                      |
+| Input: parentID - the project ID of the parent                                |
+|        leafName - the name of the target node.                                |
+| Output: the id of the leaf node.                                              |
++------------------------------------------------------------------------------*/
+long SheetAutomation_findLeafCreateIfMissing(long parentID, LPCWSTR leafName)
+{
+    long leafID = 0;
+    HAADMSBUFFER buffer = aaApi_SelectProjectDataBufferChilds2(parentID,false);
+    HAADMSBUFFER parentbuffer = aaApi_SelectProjectDataBuffer(parentID);
+    int ssChildCount = aaApi_DmsDataBufferGetCount(buffer);
+    for (int k = 0;k<ssChildCount;k++)
+    {
+        LPCWSTR leaf = aaApi_DmsDataBufferGetStringProperty(buffer,PROJ_PROP_NAME,k);
+        if(wcscmp(leaf,leafName)==0)
+        {
+            leafID = aaApi_DmsDataBufferGetNumericProperty(buffer,PROJ_PROP_ID,k);
+        }
+    }
+    //if there is no project already in Piping ISO then create one.
+    if(leafID==0)
+    {
+        long lStorageID;
+        long lMgrID;
+        long lWorkFlowID;
+        long lWorkSpaceID;
+        lMgrID = aaApi_DmsDataBufferGetNumericProperty(parentbuffer,PROJ_PROP_MANAGERID,1);
+        lStorageID = aaApi_DmsDataBufferGetNumericProperty(parentbuffer,PROJ_PROP_STORAGEID,1);
+        lWorkFlowID = aaApi_DmsDataBufferGetNumericProperty(parentbuffer,PROJ_PROP_WORKFLOWID,1);
+        lWorkSpaceID = aaApi_DmsDataBufferGetNumericProperty(parentbuffer,PROJ_PROP_WSPACEPROFID, 1);
+        aaApi_CreateProject(&leafID,parentID,lStorageID,lMgrID,AADMS_PROJECT_TYPE_NORMAL,lWorkFlowID,lWorkSpaceID,0,leafName,L"ISO Sheet Model");
+    }
+    aaApi_DmsDataBufferFree(buffer);
+    aaApi_DmsDataBufferFree(parentbuffer);
+    return leafID;
+}
+/*------------------------------------------------------------------------------+
 | SheetAutomation_getSheetPath - gets the sheet path from the ProjectID for the 
 | model.  This is fairly hard coded in that the standard is that the design
 | folder structure mirrors to the sheet folder.  This is per user definition.
@@ -430,8 +493,16 @@ long SheetAutomation_getSheetPath(long startProjID)
 
     //back up three...this should be the Mechanical folder
     status = aaApi_SelectParentProject(parentID);
+    
     parentID = aaApi_GetProjectNumericProperty(PROJ_PROP_ID,0);
 
+#if !defined OLDCODE
+    parentID = SheetAutomation_findFolderID(parentID,L"Sheets");
+    
+    parentID = SheetAutomation_findFolderID(parentID,L"Piping Isometrics");
+
+    rtnID = SheetAutomation_findLeafCreateIfMissing(parentID,name);
+#else
     buffer = aaApi_SelectProjectDataBufferChilds2(parentID,false);
     int childCount = aaApi_DmsDataBufferGetCount(buffer);
     for (int i = 0;i<childCount; i++)
@@ -481,6 +552,9 @@ long SheetAutomation_getSheetPath(long startProjID)
             aaApi_DmsDataBufferFree(b2);
         }
     }
+
+#endif
+
     aaApi_DmsDataBufferFree(buffer);
 
     return rtnID;
