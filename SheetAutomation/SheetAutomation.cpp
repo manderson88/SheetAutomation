@@ -183,7 +183,17 @@ extern "C"  void     log_printf(long  level,char  *szFormat,...)
 
     dumpString (szBuf);
     }
-
+/*------------------------------------------------------------------------------+
+| SheetAutomation_pwErrorInformation - single error information code. This will |
+| be the single point for all PW errors to be processed.                        |
++------------------------------------------------------------------------------*/
+void SheetAutomation_pwErrorInformation()
+{
+    long    errNo = aaApi_GetLastErrorId();
+    LPCWSTR lastMessage = aaApi_GetLastErrorMessage();
+    LPCWSTR lastDetail = aaApi_GetLastErrorDetail();
+    log_printf(1, "PWERROR putting file to storage %S - %S",lastMessage,lastDetail);
+}
 /* -----------------------------------------------------------------------------+
 |  Gets the cached datasource name.                                             |
 |                                                                               |
@@ -360,20 +370,23 @@ extern "C" DLLEXPORT void SheetAutomation_ModelTest(char* unparsed)
 //------------------------------------------------------------------------------
 long SheetAutomation_getCurrentProjectID(DgnModelRefP pModel)
 {
-    long projID;
-    MSWChar wfullFilePath[MAXFILELENGTH];
-    mdlModelRef_getFileNameW(pModel,wfullFilePath,MAXFILELENGTH);
-    projID = aaApi_GetProjectIdFromFileName2(wfullFilePath);
-    if (0==projID)
-    {
-         long errNo = aaApi_GetLastErrorId();
-         LPCWSTR lastMessage = aaApi_GetLastErrorMessage();
-         LPCWSTR lastDetail = aaApi_GetLastErrorDetail();
-         log_printf(1, "PWERROR getting  project store %S - %S",lastMessage,lastDetail);
-    }
+    long        projID = 0;
+    MSWChar     wfullFilePath[MAXFILELENGTH];
+    StatusInt   status=ERROR;
+    status = mdlModelRef_getFileNameW(pModel,wfullFilePath,MAXFILELENGTH);
 
+    if(SUCCESS != status)
+        return -1;  //most likely bad name but this should not happen.
+
+    projID = aaApi_GetProjectIdFromFileName2(wfullFilePath);
+
+    if (0==projID)
+        SheetAutomation_pwErrorInformation();
+
+    //this is so we can capture the project from the command line parameters.
     if(projID == 0)
         projID = g_iProjectID;
+
     return projID;
 }
 /*------------------------------------------------------------------------------+
@@ -383,18 +396,35 @@ long SheetAutomation_getCurrentProjectID(DgnModelRefP pModel)
 +------------------------------------------------------------------------------*/
 long SheetAutomation_getCurrentDocumentID(DgnModelRefP pModel)               
 {
-    long projID;
-    long docID;
-    MSWChar wfullFilePath[MAXFILELENGTH];
-    mdlModelRef_getFileNameW(pModel,wfullFilePath,MAXFILELENGTH);
-    mcmMain_GetDocumentIdByFilePath(wfullFilePath,&projID,&docID);
-    if (0==projID)
+    long         projID = 0;
+    long         docID = 0;
+    MSWChar      wfullFilePath[MAXFILELENGTH];
+    char         fullFilePath[MAXFILELENGTH];
+    HAADMSBUFFER docBuffer;
+    StatusInt   status = ERROR;
+
+    //not going to worry about the status for now.
+    status = mdlModelRef_getFileName(pModel,fullFilePath,MAXFILELENGTH);
+
+    status = mdlModelRef_getFileNameW(pModel,wfullFilePath,MAXFILELENGTH);
+
+
+    //try using this function it has been deprecated.
+    //mcmMain_GetDocumentIdByFilePath(wfullFilePath,&projID,&docID);
+    docBuffer = aaApi_SelectDocumentDataBufferByFilePath(wfullFilePath);
+
+    if (NULL == docBuffer)
+        SheetAutomation_pwErrorInformation();
+    else
     {
-         long errNo = aaApi_GetLastErrorId();
-         LPCWSTR lastMessage = aaApi_GetLastErrorMessage();
-         LPCWSTR lastDetail = aaApi_GetLastErrorDetail();
-         log_printf(1, "PWERROR getting  project store %S - %S",lastMessage,lastDetail);
+        docID = aaApi_DmsDataBufferGetNumericProperty(docBuffer,DOC_PROP_ID,0);
+        projID = aaApi_DmsDataBufferGetNumericProperty(docBuffer,DOC_PROP_PROJECTID,0);
+        aaApi_DmsDataBufferFree(docBuffer);
     }
+
+    if (0==projID)
+        SheetAutomation_pwErrorInformation();
+
     if(docID == 0)
         docID = g_iDocID;
 
@@ -409,17 +439,20 @@ long SheetAutomation_getCurrentDocumentID(DgnModelRefP pModel)
 +------------------------------------------------------------------------------*/
 long SheetAutomation_findFolderID (long startingFolder,LPCWSTR targetName)
 {
-    long folderID = 0;
+    long         folderID = 0;
     HAADMSBUFFER buffer;
+    
     buffer = aaApi_SelectProjectDataBufferChilds2(startingFolder,false);
+    
+    if (NULL == buffer)
+        return -1;
+
     int childCount = aaApi_DmsDataBufferGetCount(buffer);
     for (int i = 0;i<childCount; i++)
     {
         LPCWSTR childName = aaApi_DmsDataBufferGetStringProperty(buffer,PROJ_PROP_NAME,i);
         if (wcscmp(childName,targetName) == 0)
-        {
             folderID = aaApi_DmsDataBufferGetNumericProperty(buffer,PROJ_PROP_ID,i);
-        }
     }
 
     return folderID;
@@ -434,17 +467,20 @@ long SheetAutomation_findFolderID (long startingFolder,LPCWSTR targetName)
 +------------------------------------------------------------------------------*/
 long SheetAutomation_findLeafCreateIfMissing(long parentID, LPCWSTR leafName)
 {
-    long leafID = 0;
+    long         leafID = 0;
     HAADMSBUFFER buffer = aaApi_SelectProjectDataBufferChilds2(parentID,false);
     HAADMSBUFFER parentbuffer = aaApi_SelectProjectDataBuffer(parentID);
+    
+    if((NULL == buffer)||(NULL == parentbuffer))
+        return -1;
+
     int ssChildCount = aaApi_DmsDataBufferGetCount(buffer);
+
     for (int k = 0;k<ssChildCount;k++)
     {
         LPCWSTR leaf = aaApi_DmsDataBufferGetStringProperty(buffer,PROJ_PROP_NAME,k);
         if(wcscmp(leaf,leafName)==0)
-        {
             leafID = aaApi_DmsDataBufferGetNumericProperty(buffer,PROJ_PROP_ID,k);
-        }
     }
     //if there is no project already in Piping ISO then create one.
     if(leafID==0)
@@ -459,8 +495,10 @@ long SheetAutomation_findLeafCreateIfMissing(long parentID, LPCWSTR leafName)
         lWorkSpaceID = aaApi_DmsDataBufferGetNumericProperty(parentbuffer,PROJ_PROP_WSPACEPROFID, 1);
         aaApi_CreateProject(&leafID,parentID,lStorageID,lMgrID,AADMS_PROJECT_TYPE_NORMAL,lWorkFlowID,lWorkSpaceID,0,leafName,L"ISO Sheet Model");
     }
+
     aaApi_DmsDataBufferFree(buffer);
     aaApi_DmsDataBufferFree(parentbuffer);
+    
     return leafID;
 }
 /*------------------------------------------------------------------------------+
@@ -476,6 +514,10 @@ long SheetAutomation_getSheetPath(long startProjID)
     long rtnID=0;
     long status = 0;
     HAADMSBUFFER buffer = aaApi_SelectProjectDataBuffer(startProjID);
+
+    if (NULL == buffer)
+        return -1;
+
     //this should be the name that is compared to...
     LPCWSTR name = aaApi_DmsDataBufferGetStringProperty(buffer,PROJ_PROP_NAME ,0);
     
@@ -566,34 +608,35 @@ long SheetAutomation_getSheetPath(long startProjID)
 +------------------------------------------------------------------------------*/
 int SheetAutomation_commitToPW(DgnModelRefP pModel,long projID,long parentID)
 {
-    long iFileType = AADMS_FTYPE_DWG;
-    long iItemType = AADMS_ITYPE_UNKNOWN;
-    long iAppType=0 ;
-    long iDepType=0;
-    long iWorkspace=0;
-    BOOL bLeaveOut = false;
-    long ulFlags = AADMSDOCCREF_DEFAULT;
-    long ulMask = 0x0;
-    wchar_t workingFileName[1024];
-    long bufferSize = 1024;
-    long  attrId;
-    MSWChar fName[1024];
+    long    iFileType = AADMS_FTYPE_SHEET;
+    long    iItemType = AADMS_ITYPE_UNKNOWN;
+    long    iAppType=0 ;
+    long    iDepType=0;
+    long    iWorkspace=0;
+    long    iStorageID = 0;
+    BOOL    bLeaveOut = FALSE;
+    long    ulFlags = AADMSDOCCREF_DEFAULT;
+    long    ulMask = 0x0;
+    wchar_t workingFileName[MAXFILELENGTH*4];//was coming out walked on...
+    long    bufferSize = 1024;
+    long    attrId;
+    MSWChar docName[MAXFILELENGTH];
     MSWChar fileName[MAXFILELENGTH];
     MSWChar baseName[MAXNAMELENGTH];
     MSWChar dev[MAXDEVICELENGTH];
     MSWChar dir[MAXDIRLENGTH];
     MSWChar ext[MAXEXTENSIONLENGTH];
     MSWChar baseFileName[MAXFILELENGTH];
-    BOOL bStatus = false;
-    long docID=0;
+    BOOL    bStatus = false;
+    long    docID=0;
     WString description;
-    BOOL isLoggedIn = TRUE;
-    WString versionString=WString("1");
+    
     mdlModelRef_getFileNameW(pModel,fileName,MAXFILELENGTH);
     mdlFile_parseNameW(fileName,dev,dir,baseName,ext);
-    mdlFile_buildNameW(fName,NULL,NULL,baseName,L"SHT");
+    mdlFile_buildNameW(docName,NULL,NULL,baseName,L"SHT");
     mdlFile_buildNameW(baseFileName,NULL,NULL,baseName,ext);
-    long outProjID = SheetAutomation_getSheetPath(projID);
+    
+    long    outProjID = SheetAutomation_getSheetPath(projID);
     
     if (outProjID <=0)
         return outProjID;
@@ -602,37 +645,39 @@ int SheetAutomation_commitToPW(DgnModelRefP pModel,long projID,long parentID)
     description = WString ("ISOAutomation Model");
 
     //need to get the out project ID
-    bStatus = aaApi_CreateDocument (&docID,outProjID,0,
+    bStatus = aaApi_CreateDocument (&docID,outProjID,iStorageID,
                                     iFileType,iItemType,iAppType,iDepType,
-                                    iWorkspace,fileName,baseFileName,fName,
+                                    iWorkspace,fileName,baseFileName,docName,
                                     description.GetMSWCharCP(),
                                     NULL,bLeaveOut,ulFlags,workingFileName,
                                     bufferSize,&attrId);  
 
     //if the file is checked in then make a set of things.    
-    if(bStatus)
+    if(TRUE == bStatus)
     {
         long  setId;
         long  memberID;
         log_printf(1, "PW file commited to the store \n");
 
         bStatus = aaApi_CreateLSet (&setId,outProjID,docID,projID,parentID,AADMS_SETMEM_REF,AADMS_SETMEM_COPY,&memberID);
+
+        log_printf(0,"PW set created %ld, member id  %ld, outProject = %ld, document id = %ld, project ID = %ld, parent ID = %ld \n",setId,memberID,outProjID,docID,projID,parentID);
     }
-    //set the file type to autocad.
-    if((TRUE == bStatus) && (docID>0))
+
+//taking this out since I am setting the file type in the create step.
+#if defined OLDCODE
+    //set the file type to sheet.
+    if(TRUE == bStatus)
     {
         log_printf(0, "PW Doc Set created");
         bStatus = aaApi_SetDocumentFileType(projID,docID,AADMS_FTYPE_SHEET);
     }
-   //did not create or  checkin a doc
-    if ((false == bStatus) && (0 == docID))
-        {
-            long errNo = aaApi_GetLastErrorId();
-            LPCWSTR lastMessage = aaApi_GetLastErrorMessage();
-            LPCWSTR lastDetail = aaApi_GetLastErrorDetail();
-             
-            log_printf(1, "PWERROR putting file to storage %S - %S",lastMessage,lastDetail);
+#endif
 
+   //did not create or  checkin a doc
+    if (FALSE == bStatus)
+        {
+            SheetAutomation_pwErrorInformation(); 
             return !SUCCESS;
         }
     
@@ -646,13 +691,15 @@ int SheetAutomation_commitToPW(DgnModelRefP pModel,long projID,long parentID)
 +------------------------------------------------------------------------------*/
 void SheetAutomation_attachReference(DgnModelRefP pModel, DgnModelRefP attachModel, int nestFlag, bool bFlag)
 {
-    DgnModelRefP refAttachment;
-    char         fileName[MAXFILELENGTH];
-    MSWChar      refAttModelName[MAX_MODEL_NAME_LENGTH];
-    MSWChar      logicalName[MAX_MODEL_NAME_LENGTH];
-    MSWChar      description[MAX_MODEL_DESCR_LENGTH];
-    int          status;
+    DgnModelRefP   refAttachment;
+    char           fileName[MAXFILELENGTH];
+    MSWChar        refAttModelName[MAX_MODEL_NAME_LENGTH];
+    MSWChar        logicalName[MAX_MODEL_NAME_LENGTH];
+    MSWChar        description[MAX_MODEL_DESCR_LENGTH];
+    int            status;
     ReferenceFileP refP;
+
+    //get the information to populate the reference file attachment.
     mdlModelRef_getFileName(attachModel,fileName,MAXFILELENGTH);
     mdlModelRef_getModelName   (attachModel,refAttModelName);
     mdlModelRef_getModelDescription(attachModel,logicalName);
@@ -663,32 +710,37 @@ void SheetAutomation_attachReference(DgnModelRefP pModel, DgnModelRefP attachMod
     char dir[MAXDIRLENGTH];
     char attName[MAXFILELENGTH];
     char ext[MAXEXTENSIONLENGTH];
+
     mdlFile_parseName(fileName,dev,dir,attName,ext);
+    
     if(g_iProjectID>0)
         sprintf(attachmentFileName,"PW_WORKDIR:dms%05d\\%s.%s",g_iProjectID,attName,ext);
     else
         strcpy(attachmentFileName,fileName);
+    
     log_printf(0,"creating attachment ");
+    
     status = mdlRefFile_beginAttachmentToModel(&refAttachment,attachmentFileName,refAttModelName,logicalName,description,pModel);
     if(0 == status)
         log_printf(0,"begin succeeded  ");
     //any steps needed in the attachment process.
-     if(bFlag)
-    {
-        RotMatrix rMatrix;
-        int       attachMethod = ATTACHMETHOD_Isometric;
-        //at one time I thought I had to rotate the reference file.
-        //turns out I did not just attach to the correct model.
-        //left this in for reference on how to work with the reference during
-        //attach process.
-        mdlView_getStandard(&rMatrix,STDVIEW_ISO);
-        mdlRefFile_setParameters (&rMatrix,REFERENCE_ROTATION,refAttachment);
-        mdlRefFile_setParameters(&attachMethod,REFERENCE_ATTACHMETHOD, refAttachment);
-        refP = mdlRefFile_getInfo(refAttachment);
-        //printf("the master orig is %lf, %lf, %lf and the ref orig is %lf, %lf, %lf \n", refP->display.mast_org.x, refP->display.mast_org.y,refP->display.mast_org.z,
-        //    refP->display.ref_org.x,refP->display.ref_org.y, refP->display.ref_org.z);
-        mdlRefFile_setCoincidentWorldOrigin(refAttachment);
-    }
+    if(bFlag)
+        {
+            RotMatrix rMatrix;
+            int       attachMethod = ATTACHMETHOD_Isometric;
+            //at one time I thought I had to rotate the reference file.
+            //turns out I did not just attach to the correct model.
+            //left this in for reference on how to work with the reference during
+            //attach process.
+            mdlView_getStandard(&rMatrix,STDVIEW_ISO);
+            mdlRefFile_setParameters (&rMatrix,REFERENCE_ROTATION,refAttachment);
+            mdlRefFile_setParameters(&attachMethod,REFERENCE_ATTACHMETHOD, refAttachment);
+            refP = mdlRefFile_getInfo(refAttachment);
+            //printf("the master orig is %lf, %lf, %lf and the ref orig is %lf, %lf, %lf \n", refP->display.mast_org.x, refP->display.mast_org.y,refP->display.mast_org.z,
+            //    refP->display.ref_org.x,refP->display.ref_org.y, refP->display.ref_org.z);
+            mdlRefFile_setCoincidentWorldOrigin(refAttachment);
+        }
+    
     status = mdlRefFile_completeAttachment(refAttachment,nestFlag,-1,FALSE);
 
     if (SUCCESS == status)
@@ -700,20 +752,21 @@ void SheetAutomation_attachReference(DgnModelRefP pModel, DgnModelRefP attachMod
 +------------------------------------------------------------------------------*/
 void SheetAutomation_createSheet(void)
 {
-    int          status;
-    char         fileName[MAXFILELENGTH];
-    DgnModelRefP outModel;
-    BoolInt      is3dFile;
-    char         baseFullFileName[MAXFILELENGTH];
-    char         baseDevName[MAXDEVICELENGTH];
-    char         baseDirName[MAXDIRLENGTH];
-    char         baseExtName[MAXEXTENSIONLENGTH];
-    char         baseFileName[MAXFILELENGTH];
-    DgnModelRefP sheetModelP=NULL;
-    DgnModelRefP origSheetModelP=NULL;
-    DgnFileObjP  currentFileP = ISessionMgr::GetActiveDgnFile();
-    DgnFileObjP  destFileP;
-    MSWChar wrkFile[MAXFILELENGTH];
+    int             status;
+    char            fileName[MAXFILELENGTH];
+    DgnModelRefP    outModel;
+    BoolInt         is3dFile;
+    char            baseFullFileName[MAXFILELENGTH];
+    char            baseDevName[MAXDEVICELENGTH];
+    char            baseDirName[MAXDIRLENGTH];
+    char            baseExtName[MAXEXTENSIONLENGTH];
+    char            baseFileName[MAXFILELENGTH];
+    DgnModelRefP    sheetModelP=NULL;
+    DgnModelRefP    origSheetModelP=NULL;
+    DgnFileObjP     currentFileP = ISessionMgr::GetActiveDgnFile();
+    DgnFileObjP     destFileP;
+    MSWChar         wrkFile[MAXFILELENGTH];
+
     //copy out the file to make sure we have it for reference.
     aaApi_CopyOutDocument(g_iProjectID,g_iDocID,NULL,wrkFile,MAXFILELENGTH);
     
@@ -722,6 +775,7 @@ void SheetAutomation_createSheet(void)
     mdlFile_parseName (baseFullFileName,baseDevName,baseDirName,baseFileName,baseExtName);
     mdlFile_buildName(fileName,baseDevName,baseDirName,baseFileName,"SHT");
     is3dFile = mdlModelRef_is3D(ACTIVEMODEL);
+    
     //create a file with a default model.
     status = mdlWorkDgn_createFile (&outModel, fileName, DGNFILE_FORMAT_V8, ACTIVEMODEL, SEED_CopyDefaultData, NULL, NULL, is3dFile); 
     mdlWorkDgn_saveChanges(outModel);
@@ -730,54 +784,58 @@ void SheetAutomation_createSheet(void)
     //attach the original design model the design model in the SHT file.
     SheetAutomation_attachReference(outModel,ACTIVEMODEL,REFATTACH_NEST_NONE,false);
     mdlWorkDgn_saveChanges(outModel); 
+    
     //is there a sheet model then we will copy it over to the new file and attach 
     //the design model as a reference to it.
     status = mdlModelRef_createWorkingByName(&origSheetModelP,currentFileP,L"SheetView",false,false);
     if(SUCCESS == status)
-    {
-    SheetDef* sdP=NULL;
-    status = mdlModelRef_getSheetDef(origSheetModelP,sdP);
-        
-    destFileP = mdlModelRef_getDgnFile(outModel);
-    //copy the  sheet model from the source to the new file.
-    status = mdlModelRef_copyModel (&sheetModelP,origSheetModelP,destFileP,L"SheetView",L"Sheet View");
-    mdlWorkDgn_saveChanges(outModel); 
-        
-    log_printf(0,"the sheet model is copied ");
-
-    if (SUCCESS == status)
         {
-            //attach the design model in the SHT file to the sheet model in the SHT file.
-            SheetAutomation_attachReference(sheetModelP,origSheetModelP,REFATTACH_NEST_DISPLAY, false);
-            mdlModelRef_setModelType(sheetModelP,MODEL_TYPE_Sheet);
-            mdlModelRef_freeWorking(sheetModelP);
+            SheetDef* sdP=NULL;
+            status = mdlModelRef_getSheetDef(origSheetModelP,sdP);
+        
+            destFileP = mdlModelRef_getDgnFile(outModel);
+            //copy the  sheet model from the source to the new file.
+            status = mdlModelRef_copyModel (&sheetModelP,origSheetModelP,destFileP,L"SheetView",L"Sheet View");
+    
+            mdlWorkDgn_saveChanges(outModel); 
+        
+            log_printf(0,"the sheet model is copied ");
+
+            if (SUCCESS == status)
+                {
+                    //attach the design model in the SHT file to the sheet model in the SHT file.
+                    SheetAutomation_attachReference(sheetModelP,origSheetModelP,REFATTACH_NEST_DISPLAY, false);
+                    mdlModelRef_setModelType(sheetModelP,MODEL_TYPE_Sheet);
+                    mdlModelRef_freeWorking(sheetModelP);
                 
-            if(sdP!=NULL)
-                mdlSheetDef_free(&sdP);
+                    if(sdP!=NULL)
+                        mdlSheetDef_free(&sdP);
                 
-            mdlWorkDgn_saveChanges(outModel);
+                    mdlWorkDgn_saveChanges(outModel);
+                }
+                
+            mdlModelRef_freeWorking(origSheetModelP);
         }
-                
-    mdlModelRef_freeWorking(origSheetModelP);
-    }
+
     long projID = SheetAutomation_getCurrentProjectID(ACTIVEMODEL);
     long docID = SheetAutomation_getCurrentDocumentID(ACTIVEMODEL);
     
     if(projID>0)
         status = SheetAutomation_commitToPW(outModel,projID,docID);
     
-    if(0>=status)
-        log_printf(0,"error commiting to PW store");
-    else
+    if(SUCCESS==status)
         log_printf(0,"Commited Project ID %ld ",status);
+    else
+        log_printf(0,"error commiting to PW store");
 
+    //make sheet model active model save settings????
     mdlWorkDgn_closeFile(outModel);
 
     return;
 }
 /*---------------------------------------------------------------------------------**//**
 * @description  SheetAutomation_mdlCommand
-* @param 	unparsed      The unparsed information sent to the command
+* @param 	unparsed      The project and document id passed in as an unparsed arg
 * @bsimethod 							BSI             06/03
 +---------------+---------------+---------------+---------------+---------------+------*/
 extern "C" DLLEXPORT void SheetAutomation_mdlCommand 
