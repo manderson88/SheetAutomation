@@ -29,10 +29,15 @@
 // ---------------------------------------------------------------------------
 /*
 /* CHANGE LOG
- * $Archive:  $
- * $Revision: $
- * $Modtime:  $
- * $History:  $
+ * $Archive: /MDL/ISOSheetAutomation/SheetAutomation/SheetAutomation/stdafx.h $
+ * $Revision: 1 $
+ * $Modtime: 3/03/17 12:38p $
+ * $History: stdafx.h $
+ * 
+ * *****************  Version 1  *****************
+ * User: Mark.anderson Date: 3/06/17    Time: 12:01p
+ * Created in $/MDL/ISOSheetAutomation/SheetAutomation/SheetAutomation
+ * Initial checkin
  * 
  +--------------------------------------------------------------------------------------*/
 // stdafx.h : include file for standard system include files,

@@ -30,9 +30,14 @@
 /*
 /* CHANGE LOG
  * $Archive: /MDL/ISOSheetAutomation/SheetAutomation/SheetAutomation/SheetAutomation.cpp $
- * $Revision: 1 $
- * $Modtime: 3/06/17 9:19a $
+ * $Revision: 2 $
+ * $Modtime: 3/14/17 11:04a $
  * $History: SheetAutomation.cpp $
+ * 
+ * *****************  Version 2  *****************
+ * User: Mark.anderson Date: 3/15/17    Time: 12:50p
+ * Updated in $/MDL/ISOSheetAutomation/SheetAutomation/SheetAutomation
+ * updating comments and refactoring 
  * 
  * *****************  Version 1  *****************
  * User: Mark.anderson Date: 3/06/17    Time: 12:00p
@@ -114,6 +119,10 @@ USING_NAMESPACE_BENTLEY
 USING_NAMESPACE_BENTLEY_USTN
 USING_NAMESPACE_BENTLEY_USTN_ELEMENT
 
+extern "C" int dgnFileObj_setDefaultModelID(DgnFile* pFile,ModelID id);
+extern "C" ModelID dgnFileObj_getDefaultModelID(DgnFile* dgnFileP);
+extern "C" int mdlModelRef_saveModelInfo(DgnModelRefP pModel, BoolInt flag);
+
 #define DIM(a)      (  (sizeof a) / sizeof *(a)  )
 //#include "Reporter.h"
 static WString gDataSource;
@@ -192,7 +201,7 @@ void SheetAutomation_pwErrorInformation()
     long    errNo = aaApi_GetLastErrorId();
     LPCWSTR lastMessage = aaApi_GetLastErrorMessage();
     LPCWSTR lastDetail = aaApi_GetLastErrorDetail();
-    log_printf(1, "PWERROR putting file to storage %S - %S",lastMessage,lastDetail);
+    log_printf(1, "PWERROR %S - %S",lastMessage,lastDetail);
 }
 /* -----------------------------------------------------------------------------+
 |  Gets the cached datasource name.                                             |
@@ -401,7 +410,9 @@ long SheetAutomation_getCurrentDocumentID(DgnModelRefP pModel)
     MSWChar      wfullFilePath[MAXFILELENGTH];
     char         fullFilePath[MAXFILELENGTH];
     HAADMSBUFFER docBuffer;
-    StatusInt   status = ERROR;
+    StatusInt    status = ERROR;
+    LPGUID       pGUIDs;
+    int          nGUIDs;
 
     //not going to worry about the status for now.
     status = mdlModelRef_getFileName(pModel,fullFilePath,MAXFILELENGTH);
@@ -411,6 +422,8 @@ long SheetAutomation_getCurrentDocumentID(DgnModelRefP pModel)
 
     //try using this function it has been deprecated.
     //mcmMain_GetDocumentIdByFilePath(wfullFilePath,&projID,&docID);
+    status = aaApi_GetGuidsFromFileName(&pGUIDs,&nGUIDs,fullFilePath,FALSE);
+    
     docBuffer = aaApi_SelectDocumentDataBufferByFilePath(wfullFilePath);
 
     if (NULL == docBuffer)
@@ -427,6 +440,9 @@ long SheetAutomation_getCurrentDocumentID(DgnModelRefP pModel)
 
     if(docID == 0)
         docID = g_iDocID;
+    
+    if(nGUIDs>0)
+        aaApi_Free(pGUIDs);
 
     return docID;
 }
@@ -468,6 +484,7 @@ long SheetAutomation_findFolderID (long startingFolder,LPCWSTR targetName)
 long SheetAutomation_findLeafCreateIfMissing(long parentID, LPCWSTR leafName)
 {
     long         leafID = 0;
+    BOOL         bStatus;
     HAADMSBUFFER buffer = aaApi_SelectProjectDataBufferChilds2(parentID,false);
     HAADMSBUFFER parentbuffer = aaApi_SelectProjectDataBuffer(parentID);
     
@@ -493,7 +510,9 @@ long SheetAutomation_findLeafCreateIfMissing(long parentID, LPCWSTR leafName)
         lStorageID = aaApi_DmsDataBufferGetNumericProperty(parentbuffer,PROJ_PROP_STORAGEID,1);
         lWorkFlowID = aaApi_DmsDataBufferGetNumericProperty(parentbuffer,PROJ_PROP_WORKFLOWID,1);
         lWorkSpaceID = aaApi_DmsDataBufferGetNumericProperty(parentbuffer,PROJ_PROP_WSPACEPROFID, 1);
-        aaApi_CreateProject(&leafID,parentID,lStorageID,lMgrID,AADMS_PROJECT_TYPE_NORMAL,lWorkFlowID,lWorkSpaceID,0,leafName,L"ISO Sheet Model");
+        bStatus = aaApi_CreateProject(&leafID,parentID,lStorageID,lMgrID,AADMS_PROJECT_TYPE_NORMAL,lWorkFlowID,lWorkSpaceID,0,leafName,L"ISO Sheet Model");
+        if(!bStatus)
+            SheetAutomation_pwErrorInformation();
     }
 
     aaApi_DmsDataBufferFree(buffer);
@@ -796,28 +815,41 @@ void SheetAutomation_createSheet(void)
             destFileP = mdlModelRef_getDgnFile(outModel);
             //copy the  sheet model from the source to the new file.
             status = mdlModelRef_copyModel (&sheetModelP,origSheetModelP,destFileP,L"SheetView",L"Sheet View");
-    
+            
+            destFileP->ProcessChanges(DGNSAVE_SAVE_SETTINGS,0);
+            ModelID sheetID = sheetModelP->GetModelID();
+            //not documented function pulled it out of the library.
+            dgnFileObj_setDefaultModelID (destFileP,sheetID);
+
+            destFileP->ProcessChanges(DGNSAVE_SAVE_SETTINGS,0);
+            
+            sheetID = dgnFileObj_getDefaultModelID (destFileP);
+            
             mdlWorkDgn_saveChanges(outModel); 
         
             log_printf(0,"the sheet model is copied ");
 
             if (SUCCESS == status)
                 {
+                    SheetDef* sheetDefP=NULL;
                     //attach the design model in the SHT file to the sheet model in the SHT file.
                     SheetAutomation_attachReference(sheetModelP,origSheetModelP,REFATTACH_NEST_DISPLAY, false);
                     mdlModelRef_setModelType(sheetModelP,MODEL_TYPE_Sheet);
+                    mdlModelRef_saveModelInfo(sheetModelP,TRUE);
                     mdlModelRef_freeWorking(sheetModelP);
                 
                     if(sdP!=NULL)
                         mdlSheetDef_free(&sdP);
                 
                     mdlWorkDgn_saveChanges(outModel);
-                }
-                
+                }                
             mdlModelRef_freeWorking(origSheetModelP);
         }
 
+    //these will get the project id from the current and uses
+    //these as a reference model.
     long projID = SheetAutomation_getCurrentProjectID(ACTIVEMODEL);
+
     long docID = SheetAutomation_getCurrentDocumentID(ACTIVEMODEL);
     
     if(projID>0)
