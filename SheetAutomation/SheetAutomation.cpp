@@ -474,6 +474,91 @@ long SheetAutomation_findFolderID (long startingFolder,LPCWSTR targetName)
     return folderID;
 }
 /*------------------------------------------------------------------------------+
+| SheetAutomation_CreateProject2 is a wrapper around the PWAP call to create    |
+| a project.  This is used to create a project that has the environment set.    |
+| Input: parentID - the id of the parent project.                               |
+|        storageID - the id of the storage location                             |
+|        mgrID - the id for the manager (can be 0)                              |
+|        projType - the project type                                            |
+|        workFlowID - the workflow id                                           |
+|        workspaceID - the workspace id.                                        |
+|        envID - the environment id.                                            |
+|        projName - the name for the project.                                   |
+|        projDescr - the description of the project.                            |
+| The parent id, projName and projDescr are the only required.                  |
+| For the others pass 0 to get them pylled                                      |
+| from the parent project.                                                      |
+|                                                                               |
+| Output: the new Project ID 0 if no project is created.                        |
++------------------------------------------------------------------------------*/
+long SheetAutomation_CreateProject2(long parentID,long storageID, long mgrID,   
+                                       long projType,long workFlowID,long workspaceID,
+                                       long envID, LPCWSTR projName,LPWSTR projDescr)
+{
+    AADMSPROJITEM   projItem;
+    long            accessControl = 0;
+    long            lStorageID;
+    long            lMgrID;
+    long            lWorkFlowID;
+    long            lWorkSpaceID;
+    long            lProjType;
+    LPCGUID         guidParent;
+    long            lEnvID;
+
+    memset(&projItem,0,sizeof projItem);
+    //get the settings from the parent.
+    HAADMSBUFFER    parentbuffer = aaApi_SelectProjectDataBuffer(parentID);
+    if(mgrID==0)
+        lMgrID = aaApi_DmsDataBufferGetNumericProperty(parentbuffer,PROJ_PROP_MANAGERID,0);
+    else
+        lMgrID = mgrID;
+    if(storageID==0)
+        lStorageID = aaApi_DmsDataBufferGetNumericProperty(parentbuffer,PROJ_PROP_STORAGEID,0);
+    else
+        lStorageID = storageID;
+    if(workFlowID==0)
+        lWorkFlowID = aaApi_DmsDataBufferGetNumericProperty(parentbuffer,PROJ_PROP_WORKFLOWID,0);
+    else
+        lWorkFlowID = workFlowID;
+    if(workspaceID == 0)
+        lWorkSpaceID = aaApi_DmsDataBufferGetNumericProperty(parentbuffer,PROJ_PROP_WSPACEPROFID, 0);
+    else
+        lWorkSpaceID = workspaceID;
+
+    guidParent  = aaApi_DmsDataBufferGetGuidProperty(parentbuffer,PROJ_PROP_PPRJGUID,0);
+
+    if(projType == 0)
+        lProjType = aaApi_DmsDataBufferGetNumericProperty (parentbuffer,PROJ_PROP_TYPE,0);
+    else
+        lProjType = projType;
+    if(envID==0)
+        lEnvID = aaApi_DmsDataBufferGetNumericProperty (parentbuffer,PROJ_PROP_ENVIRONMENTID,0);
+    else
+        lEnvID = envID;
+
+    projItem.lParentId = parentID;
+    projItem.lStorageId = lStorageID;
+    projItem.lManagerId = lMgrID;
+    projItem.lTypeId = lProjType;
+    projItem.lWorkflowId = lWorkFlowID;
+    projItem.lWorkspaceProfileId = lWorkSpaceID;
+    projItem.lptstrName=const_cast<LPWSTR>(projName);//cast away the const for applying to this.
+    projItem.lptstrDesc=projDescr;
+    projItem.lEnvironmentId = lEnvID;
+    projItem.ulFlags = AADMSPROJF_ALL;
+     
+    aaApi_DmsDataBufferFree(parentbuffer);
+
+    if(aaApi_CreateProject2(&projItem,accessControl))
+        return projItem.lProjectId;
+
+    long    errNo = aaApi_GetLastErrorId();
+    LPCWSTR lastMessage = aaApi_GetLastErrorMessage();
+    LPCWSTR lastDetail = aaApi_GetLastErrorDetail();
+
+    return 0;
+}
+/*------------------------------------------------------------------------------+
 | SheetAutomation_findLeafCreateIfMissing - this function will find the node    |
 | that matches the name passed in.  If the node does not exist then it is       |
 | created.                                                                      |
@@ -484,7 +569,6 @@ long SheetAutomation_findFolderID (long startingFolder,LPCWSTR targetName)
 long SheetAutomation_findLeafCreateIfMissing(long parentID, LPCWSTR leafName)
 {
     long         leafID = 0;
-    BOOL         bStatus;
     HAADMSBUFFER buffer = aaApi_SelectProjectDataBufferChilds2(parentID,false);
     HAADMSBUFFER parentbuffer = aaApi_SelectProjectDataBuffer(parentID);
     
@@ -500,18 +584,26 @@ long SheetAutomation_findLeafCreateIfMissing(long parentID, LPCWSTR leafName)
             leafID = aaApi_DmsDataBufferGetNumericProperty(buffer,PROJ_PROP_ID,k);
     }
     //if there is no project already in Piping ISO then create one.
+    //use the parent for the properties (like the environment)
     if(leafID==0)
     {
         long lStorageID;
         long lMgrID;
         long lWorkFlowID;
         long lWorkSpaceID;
-        lMgrID = aaApi_DmsDataBufferGetNumericProperty(parentbuffer,PROJ_PROP_MANAGERID,1);
-        lStorageID = aaApi_DmsDataBufferGetNumericProperty(parentbuffer,PROJ_PROP_STORAGEID,1);
-        lWorkFlowID = aaApi_DmsDataBufferGetNumericProperty(parentbuffer,PROJ_PROP_WORKFLOWID,1);
-        lWorkSpaceID = aaApi_DmsDataBufferGetNumericProperty(parentbuffer,PROJ_PROP_WSPACEPROFID, 1);
-        bStatus = aaApi_CreateProject(&leafID,parentID,lStorageID,lMgrID,AADMS_PROJECT_TYPE_NORMAL,lWorkFlowID,lWorkSpaceID,0,leafName,L"ISO Sheet Model");
-        if(!bStatus)
+        
+        lMgrID = aaApi_DmsDataBufferGetNumericProperty(parentbuffer,PROJ_PROP_MANAGERID,0);
+        lStorageID = aaApi_DmsDataBufferGetNumericProperty(parentbuffer,PROJ_PROP_STORAGEID,0);
+        lWorkFlowID = aaApi_DmsDataBufferGetNumericProperty(parentbuffer,PROJ_PROP_WORKFLOWID,0);
+        lWorkSpaceID = aaApi_DmsDataBufferGetNumericProperty(parentbuffer,PROJ_PROP_WSPACEPROFID, 0);
+        leafID = SheetAutomation_CreateProject2(parentID,lStorageID,lMgrID,
+                                                AADMS_PROJECT_TYPE_NORMAL,
+                                                lWorkFlowID,lWorkSpaceID,0,
+                                                leafName,L"ISO Sheet Model");
+
+
+        //bStatus = aaApi_CreateProject(&leafID,parentID,lStorageID,lMgrID,AADMS_PROJECT_TYPE_NORMAL,lWorkFlowID,lWorkSpaceID,0,leafName,L"ISO Sheet Model");
+        if(0==leafID)
             SheetAutomation_pwErrorInformation();
     }
 
