@@ -496,7 +496,7 @@ long SheetAutomation_CreateProject2(long parentID,long storageID, long mgrID,
                                        long envID, LPCWSTR projName,LPWSTR projDescr)
 {
     AADMSPROJITEM   projItem;
-    long            accessControl = 0;
+    long            accessControl = -1;
     long            lStorageID;
     long            lMgrID;
     long            lWorkFlowID;
